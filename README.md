@@ -1,81 +1,132 @@
-# rs_uinput
+# rs_uinput_kb
 
-`rs_uinput` is a Python library backed by Rust that types text through Linux's `uinput` subsystem.
+A high-performance Python module written in Rust (via PyO3) for simulating hardware-level keystrokes on Linux. By interfacing directly with `/dev/uinput`, this library creates a virtual USB keyboard, making it virtually undetectable by software-level input hooks.
 
-Instead of injecting keystrokes into a specific application, it creates a virtual keyboard device and sends real keyboard events through the Linux input stack.
+It features built-in humanization (randomized typing delays) and a powerful macro syntax for executing complex keystroke combinations, modifier holds, and special characters all from a single string.
 
-## Example
+## Features
+
+* **Hardware-Level Emulation:** Bypasses X11/Wayland entirely. Types directly at the kernel level.
+* **Humanized Typing:** Jittered delays between characters, randomized key-press dwell times, and varied shift-key hesitations.
+* **Inline Macro Syntax:** Trigger special keys (`{enter}`, `{backspace}`) and modifier holds (`{ctrl down}c{ctrl up}`) directly within your text strings.
+* **Blazing Fast:** Core logic written in safe Rust.
+
+---
+
+## Prerequisites
+
+* **Linux OS** (Requires `/dev/uinput` support)
+* **Python 3.7+**
+* **Rust & Cargo** (for building)
+* **Root/Sudo Access** (or configure `udev` rules so your user can write to `/dev/uinput`)
+
+---
+
+## Installation & Building
+
+This project uses `maturin` to build the Rust code into a Python module.
+
+1. Install `maturin` in your Python environment:
+```bash
+pip install maturin
+
+```
+
+
+2. Build and install the module directly into your current virtual environment:
+```bash
+maturin develop --release
+
+```
+
+---
+
+## Usage Guide
+
+**Important:** Because this script accesses `/dev/uinput`, you will likely need to run your Python script with `sudo` (e.g., `sudo python main.py`), unless you have set up specific user permissions for `uinput`.
+
+### Basic Humanized Typing
+
+By default, the function adds slight, randomized delays to mimic a real human typing.
 
 ```python
-import rs_uinput
+import rs_uinput_kb
 
-rs_uinput.type_text(
-    text="Hello, world!",
-    min_delay=0.05,
-    max_delay=0.15
+# Types a simple string with natural human-like delays
+rs_uinput_kb.type_text("Hello, world! I am typing like a human.")
+
+```
+
+### Instant / Machine-Speed Typing
+
+If you want the text to appear instantaneously, set all delay parameters to `0`.
+
+```python
+import rs_uinput_kb
+
+rs_uinput_kb.type_text(
+    "This will appear instantly.",
+    min_char_delay=0.0,
+    max_char_delay=0.0,
+    min_dwell_time=0,
+    max_dwell_time=0,
+    min_shift_delay=0,
+    max_shift_delay=0,
+    startup_delay_ms=200 # Only wait 200ms for OS recognition
 )
+
 ```
 
-## How It Works
+### Advanced: Macros & Special Keys
 
-1. Python calls the Rust extension through PyO3.
-2. Rust creates a virtual keyboard using `/dev/uinput`.
-3. Each character is converted into the corresponding Linux key code.
-4. Key press and key release events are sent through the kernel.
-5. A random delay is applied between characters.
+The module supports an inline macro syntax using curly braces `{}`. This allows you to mix normal typing with special commands seamlessly.
 
-## How It Differs From pynput
+```python
+import rs_uinput_kb
 
-`pynput` typically relies on higher-level desktop APIs (X11, Wayland compatibility layers, platform-specific event injection APIs, etc.).
+# 1. Tapping Special Keys
+# Types "User", presses Tab, types "Password", presses Enter
+rs_uinput_kb.type_text("User{tab}Password{enter}")
 
-`rs_uinput` operates at the Linux input-device layer by creating a virtual keyboard device.
+# 2. Deleting Text
+# Types a typo, then uses backspace to correct it
+rs_uinput_kb.type_text("The wrong word{backspace}{backspace}{backspace}{backspace}right word.")
 
-```text
-pynput
-  ↓
-Desktop API
-  ↓
-Application
+# 3. Holding Modifiers (e.g., Copy and Paste)
+# Highlights all text, copies it, moves right, and pastes it
+rs_uinput_kb.type_text("{ctrl down}a{ctrl up}{ctrl down}c{ctrl up}{right}{ctrl down}v{ctrl up}")
 
-rs_uinput
-  ↓
-Virtual Keyboard Device
-  ↓
-Linux Input Subsystem
-  ↓
-Application
+# 4. Escaping Brackets
+# If you need to actually type a curly bracket, use double brackets
+rs_uinput_kb.type_text("def my_function() {{ return True; }}")
+
 ```
 
-Because it acts as an input device, applications receive the events through the normal Linux input pipeline rather than through a specific GUI automation API.
+**Supported Special Keys:**
+`backspace`, `enter`, `tab`, `esc`, `space`, `up`, `down`, `left`, `right`, `shift`, `ctrl`, `alt`, `meta` (or `win`, `cmd`), `insert`, `delete`, `home`, `end`, `pageup`, `pagedown`, `capslock`, `f1` through `f12`.
 
-## How It Differs From Selenium
+---
 
-Selenium does not generate system-wide keyboard input.
+## API Reference
 
-Instead, Selenium controls a web browser through the browser's automation interface:
+### `rs_uinput_kb.type_text(text, kwargs)`
 
-```text
-Selenium
-  ↓
-Browser Driver
-  ↓
-Browser
-```
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `text` | `str` | **Required** | The string of characters and `{macros}` to type. |
+| `min_char_delay` | `float` | `0.05` | Minimum wait time (in seconds) between pressing subsequent keys. |
+| `max_char_delay` | `float` | `0.1` | Maximum wait time (in seconds) between pressing subsequent keys. |
+| `min_dwell_time` | `int` | `20` | Minimum time (in milliseconds) a key is physically held down before release. |
+| `max_dwell_time` | `int` | `60` | Maximum time (in milliseconds) a key is physically held down before release. |
+| `min_shift_delay` | `int` | `10` | Minimum hesitation (in ms) before and after pressing the shift key for capital letters. |
+| `max_shift_delay` | `int` | `30` | Maximum hesitation (in ms) before and after pressing the shift key for capital letters. |
+| `startup_delay_ms` | `int` | `500` | Time (in ms) the script waits after creating the virtual `/dev/uinput` device before it starts typing. *Note: If this is too low, the OS might miss the first few keystrokes.* |
 
-This means Selenium can only interact with browser content that it controls.
+---
 
-`rs_uinput` generates keyboard events at the operating-system level, allowing text to be entered into any focused application that accepts keyboard input.
+## Troubleshooting
 
-## Use Cases
-
-- Desktop automation
-- Automated testing
-- Kiosk systems
-- Accessibility tools
-- Input simulation on Linux
-
-## Requirements
-
-- Linux
-- Kernel `uinput` support
-- Access to `/dev/uinput`
+* **`RuntimeError: Permission denied (os error 13)`**
+Your user does not have permission to read/write `/dev/uinput`. Run your Python script with `sudo` or add a `udev` rule for the `uinput` group.
+* **The first few characters are missing**
+The Linux kernel takes a fraction of a second to recognize a newly plugged-in (or virtual) USB device. Increase the `startup_delay_ms` (e.g., to `800` or `1000`).
