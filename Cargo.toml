@@ -1,0 +1,17 @@
+[package]
+name = "rs_uinput_kb"
+version = "1.1.0"
+edition = "2021"
+description = "A Python wrapper for Linux /dev/uinput keystroke simulation"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/Dwarakesh-V/rs_uinput_kb"
+
+[lib]
+name = "rs_uinput_kb"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.28.3", features = ["extension-module"] }
+rand = "0.10.1"
+input-linux = "0.7.1"
