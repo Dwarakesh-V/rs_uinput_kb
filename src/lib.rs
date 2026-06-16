@@ -295,10 +295,12 @@ fn char_to_key(c: char) -> Option<(Key, bool)> {
     max_dwell_time=60, 
     min_shift_delay=10, 
     max_shift_delay=30,
-    startup_delay_ms=500
+    startup_delay_ms=500,
+    focus_check=None
 ))]
 #[allow(clippy::too_many_arguments)]
-fn type_text(
+fn type_text<'py>( // <-- 1. Added 'py lifetime parameter
+    py: Python<'py>,
     text: String,
     min_char_delay: f64,
     max_char_delay: f64,
@@ -307,6 +309,7 @@ fn type_text(
     min_shift_delay: u64,
     max_shift_delay: u64,
     startup_delay_ms: u64,
+    focus_check: Option<Bound<'py, PyAny>>, // <-- 2. Replaced PyObject with Bound API
 ) -> PyResult<()> {
     let file = std::fs::OpenOptions::new()
         .read(true)
@@ -335,7 +338,6 @@ fn type_text(
     ui.create(&input_id, b"rs_uinput_kb\0", 0, &[])
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
-    // Wait for the OS to register the device (parameterized)
     if startup_delay_ms > 0 {
         sleep(Duration::from_millis(startup_delay_ms));
     }
@@ -350,6 +352,25 @@ fn type_text(
     let actions = parse_text(&text);
 
     for action in actions {
+        // Allow the user to cancel the script with Ctrl+C at any time
+        py.check_signals()?;
+
+        // Check current window focus
+        if let Some(ref callback) = focus_check {
+            loop {
+                py.check_signals()?;
+                
+                let is_focused: bool = callback.call0()?.extract()?;
+                if is_focused {
+                    break;
+                }
+
+                py.detach(|| {
+                    sleep(Duration::from_millis(100));
+                });
+            }
+        }
+
         match action {
             InputAction::Char(ch) => {
                 if let Some((key, shifted)) = char_to_key(ch) {
@@ -378,7 +399,10 @@ fn type_text(
 
         let char_delay = get_char_delay(min_char_delay, max_char_delay);
         if char_delay > 0.0 {
-            sleep(Duration::from_secs_f64(char_delay));
+            // Detach GIL
+            py.detach(|| {
+                sleep(Duration::from_secs_f64(char_delay));
+            });
         }
     }
 
