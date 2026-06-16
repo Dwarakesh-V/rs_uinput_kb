@@ -1,3 +1,4 @@
+from typing import Callable, Optional
 def type_text(
     text: str,
     min_char_delay: float = 0.05,
@@ -5,7 +6,8 @@ def type_text(
     min_dwell_time: int = 20,
     max_dwell_time: int = 60,
     min_shift_delay: int = 10,
-    max_shift_delay: int = 30
+    max_shift_delay: int = 30,
+    focus_check: Optional[Callable[[], bool]] = None,
 ) -> None:
     """
     Simulates hardware keystrokes using Linux's /dev/uinput.

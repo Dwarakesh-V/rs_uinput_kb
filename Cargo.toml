@@ -1,6 +1,6 @@
 [package]
 name = "rs_uinput_kb"
-version = "2.1.0"
+version = "2.1.1"
 edition = "2021"
 description = "A Python wrapper for Linux /dev/uinput keystroke simulation"
 license = "MIT"
